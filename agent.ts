@@ -1,43 +1,71 @@
 import "dotenv/config";
 
-import { createAgent, tool } from "langchain";
-import { ChatGoogleGenerativeAI } from "@langchain/google-genai";
-import { z } from "zod";
+import readline from "readline";
 
-const getWeather = tool(
-  async ({ city }) => {
-    return `It's always sunny in ${city}`;
-  },
-  {
-    name: "get_weather",
-    description: "Get weather for a city",
-    schema: z.object({
-      city: z.string(),
-    }),
-  },
-);
+import { createAgent } from "langchain";
+import { ChatGoogleGenerativeAI } from "@langchain/google-genai";
+
+import { getWeather } from "./tools/weather";
+import { calculator } from "./tools/calculator";
 
 const model = new ChatGoogleGenerativeAI({
-  model: "gemini-2.5-flash-lite",
+  model: "gemini-2.5-flash",
   apiKey: process.env.GOOGLE_API_KEY,
 });
 
 const agent = createAgent({
   model,
-  tools: [getWeather],
+  tools: [getWeather, calculator],
 });
 
-async function main() {
-  const result = await agent.invoke({
-    messages: [
-      {
-        role: "user",
-        content: "What's weather in Dubai?",
-      },
-    ],
-  });
+const rl = readline.createInterface({
+  input: process.stdin,
+  output: process.stdout,
+});
 
-  console.log(result.messages.at(-1)?.content);
+const messages: any[] = [];
+
+console.log(" AI Agent Started");
+console.log("Type 'exit' to quit\n");
+
+function ask(question: string): Promise<string> {
+  return new Promise((resolve) => {
+    rl.question(question, resolve);
+  });
+}
+
+async function main() {
+  while (true) {
+    const input = await ask("You: ");
+
+    if (input.trim().toLowerCase() === "exit") {
+      console.log(" Bye!");
+      rl.close();
+      process.exit(0);
+    }
+
+    try {
+      messages.push({
+        role: "user",
+        content: input,
+      });
+
+      const result = await agent.invoke({
+        messages,
+      });
+
+      const aiMessage = result.messages.at(-1);
+
+      console.log(`AI: ${aiMessage?.content}\n`);
+
+      messages.push({
+        role: "assistant",
+        content: aiMessage?.content,
+      });
+    } catch (error) {
+      console.error("Error:", error);
+    }
+  }
 }
 
 main();
